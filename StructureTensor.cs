@@ -14,7 +14,7 @@ using Slb.Ocean.Petrel.UI;
 
 namespace ocean_plugin
 {
-    class StructureTensorEigenvalues : SeismicAttribute<StructureTensorEigenvalues.Arguments>, IDescriptionSource
+    class StructureTensor : SeismicAttribute<StructureTensor.Arguments>, IDescriptionSource
     {
             private string[] outputNames = {
                 "lambda1",
@@ -41,7 +41,7 @@ namespace ocean_plugin
         }
 
 
-        public override void CopyArgumentPackage(StructureTensorEigenvalues.Arguments fromArgumentPackage, StructureTensorEigenvalues.Arguments toArgumentPackage)
+        public override void CopyArgumentPackage(StructureTensor.Arguments fromArgumentPackage, StructureTensor.Arguments toArgumentPackage)
         {
             if (fromArgumentPackage != null && toArgumentPackage != null)
             {
@@ -49,7 +49,7 @@ namespace ocean_plugin
             }
         }
 
-        public override bool CompareArgumentPackage(StructureTensorEigenvalues.Arguments firstArgumentPackage, StructureTensorEigenvalues.Arguments secondArgumentPackage)
+        public override bool CompareArgumentPackage(StructureTensor.Arguments firstArgumentPackage, StructureTensor.Arguments secondArgumentPackage)
         {
             if (firstArgumentPackage != null && secondArgumentPackage != null)
             {
@@ -59,12 +59,12 @@ namespace ocean_plugin
             return false;
         }
 
-        public override SeismicAttributeGenerator CreateAttributeGenerator(StructureTensorEigenvalues.Arguments argumentPackage, IGeneratorContext context)
+        public override SeismicAttributeGenerator CreateAttributeGenerator(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
         {
-            return new StructureTensorEigenvalues.Generator(argumentPackage, context);
+            return new StructureTensor.Generator(argumentPackage, context);
         }
 
-        public override bool Validate(StructureTensorEigenvalues.Arguments argumentPackage, IGeneratorContext context, out string errorMessage)
+        public override bool Validate(StructureTensor.Arguments argumentPackage, IGeneratorContext context, out string errorMessage)
         {
             errorMessage = "N/A";
 
@@ -75,7 +75,7 @@ namespace ocean_plugin
             return true;
         }
 
-        public override SeismicAttributeInfo CreateSeismicAttributeInfo(StructureTensorEigenvalues.Arguments argumentPackage, IGeneratorContext context)
+        public override SeismicAttributeInfo CreateSeismicAttributeInfo(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
         {
 
             IList<Slb.Ocean.Petrel.DomainObject.Template> templates = new List<Slb.Ocean.Petrel.DomainObject.Template>();
@@ -114,12 +114,12 @@ namespace ocean_plugin
             get { return 3; }
         }
 
-        protected override IEnumerable<string> GetInputLabels(StructureTensorEigenvalues.Arguments argumentPackage, IGeneratorContext context)
+        protected override IEnumerable<string> GetInputLabels(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
         {
             yield return "Input";
         }
 
-        protected override IEnumerable<string> GetOutputLabels(StructureTensorEigenvalues.Arguments argumentPackage, IGeneratorContext context)
+        protected override IEnumerable<string> GetOutputLabels(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
         {
             yield return "lambda1";
             yield return "lambda2";
@@ -190,7 +190,7 @@ namespace ocean_plugin
             public void CopyFrom(Arguments another)
             {
                 // TODO: implement the argument copying
-                throw new NotImplementedException();
+                if (another == null) throw new ArgumentNullException(nameof(another));
             }
 
             public bool EqualsTo(Arguments another)
@@ -199,7 +199,8 @@ namespace ocean_plugin
                 // return true if the arguments are considered equal,
                 // return false if they are considered not equal.
 
-                throw new NotImplementedException();
+                if (another == null) return false;
+                return true;
             }
             #region IDisposable Members
 
@@ -250,7 +251,7 @@ namespace ocean_plugin
             /// <summary>
             /// Argument package
             /// </summary>
-            private StructureTensorEigenvalues.Arguments arguments;
+            private StructureTensor.Arguments arguments;
 
             /// <summary>
             /// Parameterized constructor to set argument package and generator context
@@ -258,7 +259,7 @@ namespace ocean_plugin
             /// <param name="arguments">Argument package</param>
             /// <param name="context">Generator context</param>
             /// 
-            public Generator(StructureTensorEigenvalues.Arguments arguments, IGeneratorContext context)
+            public Generator(StructureTensor.Arguments arguments, IGeneratorContext context)
             {
                 this.arguments = arguments;
                 // Context 被框架注入到基类，无需手动保存或传递
@@ -278,47 +279,35 @@ namespace ocean_plugin
             /// <param name="output">the result cube</param>
             public override void Calculate(ISubCube[] input, ISubCube[] output)
             {
-                // 1) 获取子块和输出
+                // 1) 获取输入和输出子块
                 ISubCube inCube = input[0];
                 ISubCube outLam1 = output[0];
                 ISubCube outLam2 = output[1];
                 ISubCube outLam3 = output[2];
 
-                // 2) 窗口尺寸写死
-                var window = new Index3(5, 5, 5);
-                int wx = window.I / 2;
-                int wy = window.J / 2;
-                int wz = window.K / 2;
+                // 2) 遍历“输出”子块有效区域
+                Index3 min = outLam1.MinIJK;
+                Index3 max = outLam1.MaxIJK;
 
-                // 3) 遍历子块范围
-                var min = inCube.MinIJK;
-                var max = inCube.MaxIJK;
                 for (int k = min.K; k <= max.K; k++)
                     for (int j = min.J; j <= max.J; j++)
                         for (int i = min.I; i <= max.I; i++)
                         {
-                            // 3.1) 中心差分梯度
-                            float gx = (inCube[new Index3(i + 1, j, k)] - inCube[new Index3(i - 1, j, k)]) * 0.5f;
-                            float gy = (inCube[new Index3(i, j + 1, k)] - inCube[new Index3(i, j - 1, k)]) * 0.5f;
-                            float gz = (inCube[new Index3(i, j, k + 1)] - inCube[new Index3(i, j, k - 1)]) * 0.5f;
+                            // 3.1) 中心差分梯度（假设 CreateSeismicAttributeInfo 已设置 OperatorSize = 3×3×3）
+                            float gx = (inCube[new Index3(i + 1, j, k)]
+                                      - inCube[new Index3(i - 1, j, k)]) * 0.5f;
+                            float gy = (inCube[new Index3(i, j + 1, k)]
+                                      - inCube[new Index3(i, j - 1, k)]) * 0.5f;
+                            float gz = (inCube[new Index3(i, j, k + 1)]
+                                      - inCube[new Index3(i, j, k - 1)]) * 0.5f;
 
-                            // 3.2) 局部窗口内累加结构张量分量
-                            double Txx = 0, Txy = 0, Txz = 0, Tyy = 0, Tyz = 0, Tzz = 0;
-                            for (int dz = -wz; dz <= wz; dz++)
-                                for (int dy = -wy; dy <= wy; dy++)
-                                    for (int dx = -wx; dx <= wx; dx++)
-                                    {
-                                        float gxp = (inCube[new Index3(i + dx + 1, j + dy, k + dz)] - inCube[new Index3(i + dx - 1, j + dy, k + dz)]) * 0.5f;
-                                        float gyp = (inCube[new Index3(i + dx, j + dy + 1, k + dz)] - inCube[new Index3(i + dx, j + dy - 1, k + dz)]) * 0.5f;
-                                        float gzp = (inCube[new Index3(i + dx, j + dy, k + dz + 1)] - inCube[new Index3(i + dx, j + dy, k + dz - 1)]) * 0.5f;
-
-                                        Txx += gxp * gxp;
-                                        Txy += gxp * gyp;
-                                        Txz += gxp * gzp;
-                                        Tyy += gyp * gyp;
-                                        Tyz += gyp * gzp;
-                                        Tzz += gzp * gzp;
-                                    }
+                            // 3.2) 直接构造瞬时结构张量分量
+                            double Txx = gx * gx;
+                            double Tyy = gy * gy;
+                            double Tzz = gz * gz;
+                            double Txy = gx * gy;
+                            double Txz = gx * gz;
+                            double Tyz = gy * gz;
 
                             // 3.3) 特征值分解
                             ComputeEigenvaluesSymmetric3x3(
@@ -334,6 +323,7 @@ namespace ocean_plugin
                             outLam3[idx] = (float)l3;
                         }
             }
+
 
 
             #endregion

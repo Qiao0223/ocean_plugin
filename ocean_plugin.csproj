@@ -72,7 +72,7 @@
     <Compile Include="ModuleAttribute.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="StructureTensorEigenvalues.cs" />
+    <Compile Include="StructureTensor.cs" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Framework.2.0">
