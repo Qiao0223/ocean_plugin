@@ -251,20 +251,17 @@ namespace ocean_plugin
             /// Argument package
             /// </summary>
             private StructureTensorEigenvalues.Arguments arguments;
-            /// <summary>
-            /// Generator context for the attribute
-            /// </summary>
-            private IGeneratorContext generatorContext;
 
             /// <summary>
             /// Parameterized constructor to set argument package and generator context
             /// </summary>
             /// <param name="arguments">Argument package</param>
             /// <param name="context">Generator context</param>
-            public Generator(StructureTensorEigenvalues.Arguments arguments, IGeneratorContext generatorContext)
+            /// 
+            public Generator(StructureTensorEigenvalues.Arguments arguments, IGeneratorContext context)
             {
                 this.arguments = arguments;
-                this.generatorContext = generatorContext;
+                // Context 被框架注入到基类，无需手动保存或传递
             }
 
             #region Overrides from SeismicAttributeGenerator
@@ -287,38 +284,33 @@ namespace ocean_plugin
                 ISubCube outLam2 = output[1];
                 ISubCube outLam3 = output[2];
 
-                // 2) 拿窗口大小 (Index3 被填在 CreateSeismicAttributeInfo)
-                Index3 window = this.Info.WindowSize;
-                int wx = window.X / 2, wy = window.Y / 2, wz = window.Z / 2;
+                // 2) 窗口尺寸写死
+                var window = new Index3(5, 5, 5);
+                int wx = window.I / 2;
+                int wy = window.J / 2;
+                int wz = window.K / 2;
 
                 // 3) 遍历子块范围
-                Index3 min = inCube.MinIJK;
-                Index3 max = inCube.MaxIJK;
-                for (int z = min.Z; z <= max.Z; z++)
-                    for (int y = min.Y; y <= max.Y; y++)
-                        for (int x = min.X; x <= max.X; x++)
+                var min = inCube.MinIJK;
+                var max = inCube.MaxIJK;
+                for (int k = min.K; k <= max.K; k++)
+                    for (int j = min.J; j <= max.J; j++)
+                        for (int i = min.I; i <= max.I; i++)
                         {
                             // 3.1) 中心差分梯度
-                            float gx = (inCube[new Index3(x + 1, y, z)]
-                                      - inCube[new Index3(x - 1, y, z)]) * 0.5f;
-                            float gy = (inCube[new Index3(x, y + 1, z)]
-                                      - inCube[new Index3(x, y - 1, z)]) * 0.5f;
-                            float gz = (inCube[new Index3(x, y, z + 1)]
-                                      - inCube[new Index3(x, y, z - 1)]) * 0.5f;
+                            float gx = (inCube[new Index3(i + 1, j, k)] - inCube[new Index3(i - 1, j, k)]) * 0.5f;
+                            float gy = (inCube[new Index3(i, j + 1, k)] - inCube[new Index3(i, j - 1, k)]) * 0.5f;
+                            float gz = (inCube[new Index3(i, j, k + 1)] - inCube[new Index3(i, j, k - 1)]) * 0.5f;
 
-                            // 3.2) 局部窗口累加结构张量分量
+                            // 3.2) 局部窗口内累加结构张量分量
                             double Txx = 0, Txy = 0, Txz = 0, Tyy = 0, Tyz = 0, Tzz = 0;
                             for (int dz = -wz; dz <= wz; dz++)
                                 for (int dy = -wy; dy <= wy; dy++)
                                     for (int dx = -wx; dx <= wx; dx++)
                                     {
-                                        // 在邻域内同样计算梯度
-                                        float gxp = (inCube[new Index3(x + dx + 1, y + dy, z + dz)]
-                                                   - inCube[new Index3(x + dx - 1, y + dy, z + dz)]) * 0.5f;
-                                        float gyp = (inCube[new Index3(x + dx, y + dy + 1, z + dz)]
-                                                   - inCube[new Index3(x + dx, y + dy - 1, z + dz)]) * 0.5f;
-                                        float gzp = (inCube[new Index3(x + dx, y + dy, z + dz + 1)]
-                                                   - inCube[new Index3(x + dx, y + dy, z + dz - 1)]) * 0.5f;
+                                        float gxp = (inCube[new Index3(i + dx + 1, j + dy, k + dz)] - inCube[new Index3(i + dx - 1, j + dy, k + dz)]) * 0.5f;
+                                        float gyp = (inCube[new Index3(i + dx, j + dy + 1, k + dz)] - inCube[new Index3(i + dx, j + dy - 1, k + dz)]) * 0.5f;
+                                        float gzp = (inCube[new Index3(i + dx, j + dy, k + dz + 1)] - inCube[new Index3(i + dx, j + dy, k + dz - 1)]) * 0.5f;
 
                                         Txx += gxp * gxp;
                                         Txy += gxp * gyp;
@@ -336,12 +328,13 @@ namespace ocean_plugin
                                 out double l1, out double l2, out double l3);
 
                             // 3.4) 写回
-                            var idx = new Index3(x, y, z);
+                            var idx = new Index3(i, j, k);
                             outLam1[idx] = (float)l1;
                             outLam2[idx] = (float)l2;
                             outLam3[idx] = (float)l3;
                         }
             }
+
 
             #endregion
         }
