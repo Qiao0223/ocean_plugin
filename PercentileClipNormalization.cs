@@ -12,6 +12,7 @@ using Slb.Ocean.Petrel.Seismic;
 using Slb.Ocean.Petrel.DomainObject.Seismic;
 using Slb.Ocean.Petrel.Workflow;
 using Slb.Ocean.Petrel.UI;
+using Slb.Ocean.Petrel.UI.Controls; // 需要为 [Description] 注解引入
 
 namespace ocean_plugin
 {
@@ -47,9 +48,18 @@ namespace ocean_plugin
         {
             return new PercentileClipNormalization.Generator(argumentPackage, context);
         }
+        // *********************************************************************************
+        // 关键修改 1: 更新 Validate 方法以检查新参数的逻辑有效性
+        // *********************************************************************************
         public override bool Validate(PercentileClipNormalization.Arguments argumentPackage, IGeneratorContext context, out string errorMessage)
         {
-            errorMessage = "N/A"; return true;
+            if (argumentPackage.LowerPercentile >= argumentPackage.UpperPercentile)
+            {
+                errorMessage = "Lower Percentile must be less than Upper Percentile.";
+                return false;
+            }
+            errorMessage = "N/A";
+            return true;
         }
         public override SeismicAttributeInfo CreateSeismicAttributeInfo(PercentileClipNormalization.Arguments argumentPackage, IGeneratorContext context)
         {
@@ -77,21 +87,76 @@ namespace ocean_plugin
         private class AttributeDescription : IDescription
         {
             public string Name { get { return "Percentile Clip Normalization"; } }
-            public string Description { get { return "Clips data at P1 and P99 percentiles to suppress outliers, then scales the result to a [0, 1] range to enhance contrast. Memory-efficient implementation."; } }
-            public string ShortDescription { get { return "Clips at 1-99% and scales to 0-1."; } }
+            // 更新描述以反映其参数化特性
+            public string Description { get { return "Clips data at user-defined percentiles to suppress outliers, then scales the result to a [0, 1] range to enhance contrast. Memory-efficient implementation."; } }
+            public string ShortDescription { get { return "Clips at percentiles and scales to 0-1."; } }
         }
 
         [Archivable(FromRelease = "2020.1")]
         public class Arguments : Slb.Ocean.Petrel.Workflow.DescribedArgumentsByReflection, IIdentifiable, IDisposable, Slb.Ocean.Petrel.Seismic.INotifyingOnChanged
         {
+            // *********************************************************************************
+            // 关键修改 2: 在 Arguments 类中定义用户可输入的参数
+            // *********************************************************************************
+            private double lowerPercentile = 1.0;
+            private double upperPercentile = 99.0;
+
+            [Archived(Name = "LowerPercentile")]
+            [Description("Lower Percentile (%)", "The lower percentile boundary for clipping (e.g., 1). Values below this will be set to this boundary.")]
+            public double LowerPercentile
+            {
+                get { return lowerPercentile; }
+                set
+                {
+                    lowerPercentile = value;
+                    OnChanged(); // 通知Petrel参数已改变
+                }
+            }
+
+            [Archived(Name = "UpperPercentile")]
+            [Description("Upper Percentile (%)", "The upper percentile boundary for clipping (e.g., 99). Values above this will be set to this boundary.")]
+            public double UpperPercentile
+            {
+                get { return upperPercentile; }
+                set
+                {
+                    upperPercentile = value;
+                    OnChanged(); // 通知Petrel参数已改变
+                }
+            }
+
             public Arguments() { }
             [Archived(Name = "Droid")] private Droid droid;
             public Droid Droid { get { return droid; } set { droid = value; } }
-            public void CopyFrom(Arguments another) { }
-            public bool EqualsTo(Arguments another) { return true; }
+
+            // 必须更新 CopyFrom 和 EqualsTo 以包含新参数
+            public void CopyFrom(Arguments another)
+            {
+                if (another != null)
+                {
+                    this.LowerPercentile = another.LowerPercentile;
+                    this.UpperPercentile = another.UpperPercentile;
+                }
+            }
+            public bool EqualsTo(Arguments another)
+            {
+                return another != null &&
+                       this.LowerPercentile.Equals(another.LowerPercentile) &&
+                       this.UpperPercentile.Equals(another.UpperPercentile);
+            }
+
             public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
             protected virtual void Dispose(bool disposing) { }
+
+            // OnChanged 事件的实现
             public event EventHandler<ArgumentPackageChangedEventArgs> Changed;
+            private void OnChanged()
+            {
+                if (Changed != null)
+                {
+                    Changed(this, new ArgumentPackageChangedEventArgs());
+                }
+            }
         }
 
         public class ArgumentPackageDataSourceFactory : DataSourceFactory
@@ -103,7 +168,11 @@ namespace ocean_plugin
 
         public class Generator : SeismicAttributeGenerator
         {
-            private IGeneratorContext generatorContext;
+            // *********************************************************************************
+            // 关键修改 3: 存储 Arguments 对象以便在 Initialize 中使用
+            // *********************************************************************************
+            private readonly Arguments arguments;
+            private readonly IGeneratorContext generatorContext;
             private float clippingMin;
             private float clippingMax;
             private bool isInitialized = false;
@@ -112,6 +181,7 @@ namespace ocean_plugin
 
             public Generator(PercentileClipNormalization.Arguments arguments, IGeneratorContext generatorContext)
             {
+                this.arguments = arguments; // 保存传入的参数对象
                 this.generatorContext = generatorContext;
             }
 
@@ -190,8 +260,11 @@ namespace ocean_plugin
                     }
                     PetrelLogger.Info("Histogram Pass 2 Complete.");
 
-                    double lowerPercentile = 0.01;
-                    double upperPercentile = 0.99;
+                    // *********************************************************************************
+                    // 关键修改 4: 使用参数替换硬编码的值
+                    // *********************************************************************************
+                    double lowerPercentile = this.arguments.LowerPercentile / 100.0;
+                    double upperPercentile = this.arguments.UpperPercentile / 100.0;
 
                     this.clippingMin = GetValueFromHistogram(histogramBins, totalSampleCount, lowerPercentile, globalMin, range);
                     this.clippingMax = GetValueFromHistogram(histogramBins, totalSampleCount, upperPercentile, globalMin, range);
@@ -239,17 +312,15 @@ namespace ocean_plugin
 
                 float range = this.clippingMax - this.clippingMin;
 
-                // *** 这是被修正的部分 ***
                 if (Math.Abs(range) < 1e-9)
                 {
-                    // 正确的做法：手动遍历并填充
                     Index3 minFill = outCube.MinIJK;
                     Index3 maxFill = outCube.MaxIJK;
                     for (int k = minFill.K; k <= maxFill.K; k++)
                         for (int j = minFill.J; j <= maxFill.J; j++)
                             for (int i = minFill.I; i <= maxFill.I; i++)
                             {
-                                outCube[new Index3(i, j, k)] = 0.0f; // 如果范围为0，所有值都相同，归一化为0
+                                outCube[new Index3(i, j, k)] = 0.0f;
                             }
                     return;
                 }
