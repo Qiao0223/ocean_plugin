@@ -2,12 +2,12 @@
 <InstalledPlugins xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <Plugin>
     <Name>Plugin</Name>
-    <Contact>contact@company.info</Contact>
+    <Contact>1968476645@qq.com</Contact>
     <PluginTypeName>ocean_plugin.Plugin, ocean_plugin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null</PluginTypeName>
     <PluginUri>http://www.pluginuri.info/</PluginUri>
     <PluginId>://ocean_plugin.Plugin/1.0.0.0</PluginId>
     <Trust PublicKeyToken="">Default</Trust>
-    <ReleaseDate>2025-08-07</ReleaseDate>
+    <ReleaseDate>2025-08-09</ReleaseDate>
     <Author>Qiao</Author>
     <AppVersion>2020.1</AppVersion>
     <Modules>

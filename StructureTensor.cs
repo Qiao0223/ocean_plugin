@@ -16,10 +16,8 @@ namespace ocean_plugin
 {
     class StructureTensor : SeismicAttribute<StructureTensor.Arguments>, IDescriptionSource
     {
-            private string[] outputNames = {
-                "lambda1",
-                "lambda2",
-                "lambda3"
+        private string[] outputNames = {
+                "structure tensor"
                 };
 
 
@@ -81,9 +79,9 @@ namespace ocean_plugin
             IList<Slb.Ocean.Petrel.DomainObject.Template> templates = new List<Slb.Ocean.Petrel.DomainObject.Template>();
             IList<Range1<float>> ranges = new List<Range1<float>>();
 
-            templates.Add(Slb.Ocean.Petrel.DomainObject.Template.NullObject);
+            templates.Add(PetrelProject.WellKnownTemplates.SeismicColorGroup.SeismicDipAngle);
 
-            ranges.Add(new Range1<float>(float.NaN, float.NaN));
+            ranges.Add(new Range1<float>(0, 100000000));
 
             return new SeismicAttributeInfo(
                 templates,
@@ -111,7 +109,7 @@ namespace ocean_plugin
 
         public override int OutputCount
         {
-            get { return 3; }
+            get { return 1; }
         }
 
         protected override IEnumerable<string> GetInputLabels(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
@@ -121,9 +119,7 @@ namespace ocean_plugin
 
         protected override IEnumerable<string> GetOutputLabels(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
         {
-            yield return "lambda1";
-            yield return "lambda2";
-            yield return "lambda3";
+            yield return "Output";
         }
 
 
@@ -145,7 +141,7 @@ namespace ocean_plugin
             /// </summary>
             public string Name
             {
-                get { return "StructureTensorEigenvalues"; }
+                get { return "Structural tensor"; }
             }
 
             /// <summary>
@@ -153,7 +149,7 @@ namespace ocean_plugin
             /// </summary>
             public string Description
             {
-                get { return "Three eigenvalues (λ1, λ2, λ3) of the structure tensor"; }
+                get { return "structural tensor"; }
             }
 
             /// <summary>
@@ -282,8 +278,6 @@ namespace ocean_plugin
                 // 1) 获取输入和输出子块
                 ISubCube inCube = input[0];
                 ISubCube outLam1 = output[0];
-                ISubCube outLam2 = output[1];
-                ISubCube outLam3 = output[2];
 
                 // 2) 遍历“输出”子块有效区域
                 Index3 min = outLam1.MinIJK;
@@ -319,8 +313,6 @@ namespace ocean_plugin
                             // 3.4) 写回
                             var idx = new Index3(i, j, k);
                             outLam1[idx] = (float)l1;
-                            outLam2[idx] = (float)l2;
-                            outLam3[idx] = (float)l3;
                         }
             }
 
@@ -365,7 +357,5 @@ namespace ocean_plugin
             if (w1 < w2) { var t = w1; w1 = w2; w2 = t; }
             if (w0 < w1) { var t = w0; w0 = w1; w1 = t; }
         }
-
-
     }
 }

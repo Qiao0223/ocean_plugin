@@ -1,0 +1,767 @@
+Project Path: ocean_plugin
+
+Source Tree:
+
+```txt
+ocean_plugin
+├── ModuleAttribute.cs
+├── Plugin.cs
+├── Properties
+│   └── AssemblyInfo.cs
+├── RobustNormalization.cs
+├── StructureTensor.cs
+├── ocean_plugin.csproj
+├── ocean_plugin.sln
+└── plugin.xml
+
+```
+
+`ocean_plugin/Properties/AssemblyInfo.cs`:
+
+```cs
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
+// General Information about an assembly is controlled through the following 
+// set of attributes. Change these attribute values to modify the information
+// associated with an assembly.
+[assembly: AssemblyTitle("ocean_plugin")]
+[assembly: AssemblyDescription("")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("ocean_plugin")]
+[assembly: AssemblyCopyright("Copyright ©  2025")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]
+
+// Setting ComVisible to false makes the types in this assembly not visible 
+// to COM components.  If you need to access a type in this assembly from 
+// COM, set the ComVisible attribute to true on that type.
+[assembly: ComVisible(false)]
+
+// The following GUID is for the ID of the typelib if this project is exposed to COM
+[assembly: Guid("5d1c9130-ee3a-44d1-9e2d-c3911e097b5a")]
+
+// Version information for an assembly consists of the following four values:
+//
+//      Major Version
+//      Minor Version 
+//      Build Number
+//      Revision
+//
+// You can specify all the values or you can default the Revision and Build Numbers 
+// by using the '*' as shown below:
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+
+```
+
+`ocean_plugin/RobustNormalization.cs`:
+
+```cs
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+
+using Slb.Ocean.Core;
+using Slb.Ocean.Basics;
+using Slb.Ocean.Petrel;
+using Slb.Ocean.Petrel.Data;
+using Slb.Ocean.Petrel.Data.Persistence;
+using Slb.Ocean.Petrel.DomainObject;
+using Slb.Ocean.Petrel.Seismic;
+using Slb.Ocean.Petrel.DomainObject.Seismic;
+using Slb.Ocean.Petrel.Workflow;
+using Slb.Ocean.Petrel.UI;
+
+namespace ocean_plugin {
+    class RobustNormalization : SeismicAttribute<RobustNormalization.Arguments>, IDescriptionSource {
+        #region Boilerplate Code (无需修改)
+        protected override Arguments CreateArgumentPackageCore(IDataSourceManager manager) {
+            Arguments argPack = new Arguments();
+            StructuredArchiveDataSource dataSource = manager.GetSource(ArgumentPackageDataSourceFactory.DataSourceId) as StructuredArchiveDataSource;
+            if (dataSource != null) { argPack.Droid = dataSource.GenerateDroid(); dataSource.AddItem(argPack.Droid, argPack); }
+            return argPack;
+        }
+        public override void CopyArgumentPackage(RobustNormalization.Arguments fromArgumentPackage, RobustNormalization.Arguments toArgumentPackage) { if (fromArgumentPackage != null && toArgumentPackage != null) { toArgumentPackage.CopyFrom(fromArgumentPackage); } }
+        public override bool CompareArgumentPackage(RobustNormalization.Arguments firstArgumentPackage, RobustNormalization.Arguments secondArgumentPackage) { if (firstArgumentPackage != null && secondArgumentPackage != null) { return firstArgumentPackage.EqualsTo(secondArgumentPackage); } return false; }
+        public override SeismicAttributeGenerator CreateAttributeGenerator(RobustNormalization.Arguments argumentPackage, IGeneratorContext context) {
+            return new RobustNormalization.Generator(argumentPackage, context);
+        }
+        public override bool Validate(RobustNormalization.Arguments argumentPackage, IGeneratorContext context, out string errorMessage) { errorMessage = "N/A"; return true; }
+        public override SeismicAttributeInfo CreateSeismicAttributeInfo(RobustNormalization.Arguments argumentPackage, IGeneratorContext context) {
+            IList<Template> templates = new List<Template>();
+            IList<Range1<float>> ranges = new List<Range1<float>>();
+            templates.Add(PetrelProject.WellKnownTemplates.SeismicColorGroup.SeismicDefault);
+            ranges.Add(new Range1<float>(-3f, 3f));
+            return new SeismicAttributeInfo(templates, ranges, new Index3(1, 1, 1), BorderProcessingMethod.Repeat);
+        }
+        public override string CategoryName { get { return WellKnownAttributeCategory.Basic; } }
+        public override int InputCount { get { return 1; } }
+        public override int OutputCount { get { return 1; } }
+        protected override IEnumerable<string> GetInputLabels(RobustNormalization.Arguments argumentPackage, IGeneratorContext context) { yield return "Input"; }
+        protected override IEnumerable<string> GetOutputLabels(RobustNormalization.Arguments argumentPackage, IGeneratorContext context) { yield return "Output"; }
+        #endregion
+
+        #region Attribute Description & Arguments (无需修改)
+        public IDescription Description { get { return new AttributeDescription(); } }
+        private class AttributeDescription : IDescription {
+            public string Name { get { return "Robust Normalization"; } }
+            public string Description { get { return "对输入数据进行鲁棒归一化 (value - median) / IQR"; } }
+            public string ShortDescription { get { return string.Empty; } }
+        }
+
+        [Archivable(FromRelease = "2020.1")]
+        public class Arguments : Slb.Ocean.Petrel.Workflow.DescribedArgumentsByReflection, IIdentifiable, IDisposable, Slb.Ocean.Petrel.Seismic.INotifyingOnChanged {
+            public Arguments() { }
+            [Archived(Name = "Droid")] private Droid droid;
+            public Droid Droid { get { return droid; } set { droid = value; } }
+            public void CopyFrom(Arguments another) { }
+            public bool EqualsTo(Arguments another) { return true; }
+            public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
+            protected virtual void Dispose(bool disposing) { }
+            public event EventHandler<ArgumentPackageChangedEventArgs> Changed;
+        }
+
+        public class ArgumentPackageDataSourceFactory : DataSourceFactory {
+            public static string DataSourceId = @"917e25ef-e3c6-4094-9a5b-3f613da4f9e4";
+            public override IDataSource GetDataSource() { return new StructuredArchiveDataSource(DataSourceId, new[] { typeof(Arguments) }); }
+        }
+        #endregion
+
+        public class Generator : SeismicAttributeGenerator {
+            private IGeneratorContext generatorContext;
+            private float globalMedian;
+            private float globalIqr;
+            private bool isInitialized = false;
+
+            public Generator(RobustNormalization.Arguments arguments, IGeneratorContext generatorContext) {
+                this.generatorContext = generatorContext;
+            }
+
+            public override void Initialize() {
+                if (isInitialized) return;
+
+                try {
+                    PetrelLogger.Info("RobustNormalization: Starting pre-computation of global statistics...");
+                    Stopwatch sw = Stopwatch.StartNew();
+
+                    if (this.generatorContext.InputSeismicData == null || this.generatorContext.InputSeismicData.Count == 0) {
+                        PetrelLogger.Error("RobustNormalization: No input seismic data found in the context.");
+                        isInitialized = true;
+                        return;
+                    }
+
+                    // **权威解决方案: 从SeismicEntity包装器中获取SeismicCube**
+                    SeismicEntity inputEntity = this.generatorContext.InputSeismicData[0];
+
+                    if (!inputEntity.IsSeismicCube) {
+                        PetrelLogger.Error("RobustNormalization: Input data is not a SeismicCube.");
+                        isInitialized = true;
+                        return;
+                    }
+
+                    // 打开包装器，获取真正的SeismicCube对象
+                    SeismicCube inputCube = inputEntity.SeismicCube;
+
+                    if (inputCube == null) {
+                        PetrelLogger.Error("RobustNormalization: The SeismicCube inside the SeismicEntity is null.");
+                        isInitialized = true;
+                        return;
+                    }
+
+                    Index3 numSamples = inputCube.NumSamplesIJK;
+                    List<float> allValues = new List<float>();
+                    float[] traceBuffer = new float[numSamples.K];
+
+                    for (int i = 0; i < numSamples.I; i++)
+                        for (int j = 0; j < numSamples.J; j++) {
+                            inputCube.GetTraceData(i, j, traceBuffer);
+                            for (int k = 0; k < numSamples.K; k++) {
+                                float value = traceBuffer[k];
+                                if (!float.IsNaN(value)) {
+                                    allValues.Add(value);
+                                }
+                            }
+                        }
+
+                    if (allValues.Count == 0) {
+                        PetrelLogger.Info("RobustNormalization WARNING: No valid data found in the input cube.");
+                        globalMedian = 0;
+                        globalIqr = 1;
+                        isInitialized = true;
+                        return;
+                    }
+
+                    allValues.Sort();
+
+                    float q1 = GetPercentile(allValues, 0.25);
+                    this.globalMedian = GetPercentile(allValues, 0.50);
+                    float q3 = GetPercentile(allValues, 0.75);
+                    this.globalIqr = q3 - q1;
+
+                    if (Math.Abs(this.globalIqr) < 1e-9) {
+                        this.globalIqr = 1.0f;
+                        PetrelLogger.Info("RobustNormalization WARNING: IQR is near zero.");
+                    }
+
+                    sw.Stop();
+                    PetrelLogger.Info($"RobustNormalization: Pre-computation finished in {sw.Elapsed.TotalSeconds:F2}s. Median = {globalMedian}, IQR = {globalIqr}");
+                }
+                catch (Exception ex) {
+                    PetrelLogger.Error("RobustNormalization: An unexpected error occurred during initialization.", ex);
+                    globalMedian = 0;
+                    globalIqr = 1;
+                }
+                finally {
+                    isInitialized = true;
+                }
+            }
+
+            public override void Calculate(ISubCube[] input, ISubCube[] output) {
+                if (!isInitialized) {
+                    Initialize();
+                }
+
+                ISubCube inCube = input[0];
+                ISubCube outCube = output[0];
+
+                Index3 min = outCube.MinIJK;
+                Index3 max = outCube.MaxIJK;
+
+                for (int k = min.K; k <= max.K; k++)
+                    for (int j = min.J; j <= max.J; j++)
+                        for (int i = min.I; i <= max.I; i++) {
+                            Index3 idx = new Index3(i, j, k);
+                            float value = inCube[idx];
+
+                            if (float.IsNaN(value)) {
+                                outCube[idx] = float.NaN;
+                                continue;
+                            }
+
+                            float normalizedValue = (value - this.globalMedian) / this.globalIqr;
+                            outCube[idx] = normalizedValue;
+                        }
+            }
+
+            private float GetPercentile(List<float> sortedSequence, double percentile) {
+                int n = sortedSequence.Count;
+                if (n == 0) return 0;
+                if (n == 1) return sortedSequence[0];
+                double index = percentile * (n - 1);
+                int lower = (int)Math.Floor(index);
+                int upper = (int)Math.Ceiling(index);
+                if (lower == upper) { return sortedSequence[lower]; }
+                double fraction = index - lower;
+                return (float)(sortedSequence[lower] * (1.0 - fraction) + sortedSequence[upper] * fraction);
+            }
+        }
+    }
+}
+```
+
+`ocean_plugin/StructureTensor.cs`:
+
+```cs
+using System;
+using System.Collections.Generic;
+
+using Slb.Ocean.Core;
+using Slb.Ocean.Basics;
+using Slb.Ocean.Petrel;
+using Slb.Ocean.Petrel.Data;
+using Slb.Ocean.Petrel.Data.Persistence;
+using Slb.Ocean.Petrel.DomainObject;
+using Slb.Ocean.Petrel.Seismic;
+using Slb.Ocean.Petrel.DomainObject.Seismic;
+using Slb.Ocean.Petrel.Workflow;
+using Slb.Ocean.Petrel.UI;
+
+namespace ocean_plugin {
+    class StructureTensor : SeismicAttribute<StructureTensor.Arguments>, IDescriptionSource {
+        private string[] outputNames = {
+                "structure tensor"
+                };
+
+
+        #region Overrides from SeismicAttribute
+
+        protected override Arguments CreateArgumentPackageCore(IDataSourceManager manager) {
+            Arguments argPack = new Arguments();
+
+            StructuredArchiveDataSource dataSource = manager.GetSource(ArgumentPackageDataSourceFactory.DataSourceId) as StructuredArchiveDataSource;
+
+            if (dataSource != null) {
+                argPack.Droid = dataSource.GenerateDroid();
+                dataSource.AddItem(argPack.Droid, argPack);
+            }
+
+            return argPack;
+        }
+
+
+        public override void CopyArgumentPackage(StructureTensor.Arguments fromArgumentPackage, StructureTensor.Arguments toArgumentPackage) {
+            if (fromArgumentPackage != null && toArgumentPackage != null) {
+                toArgumentPackage.CopyFrom(fromArgumentPackage);
+            }
+        }
+
+        public override bool CompareArgumentPackage(StructureTensor.Arguments firstArgumentPackage, StructureTensor.Arguments secondArgumentPackage) {
+            if (firstArgumentPackage != null && secondArgumentPackage != null) {
+                return firstArgumentPackage.EqualsTo(secondArgumentPackage);
+            }
+
+            return false;
+        }
+
+        public override SeismicAttributeGenerator CreateAttributeGenerator(StructureTensor.Arguments argumentPackage, IGeneratorContext context) {
+            return new StructureTensor.Generator(argumentPackage, context);
+        }
+
+        public override bool Validate(StructureTensor.Arguments argumentPackage, IGeneratorContext context, out string errorMessage) {
+            errorMessage = "N/A";
+
+            // TODO: Please implement the validation logic for the argumentPackage.
+            // return true, when the given argumentPackage is valid.
+            // return false, and fill the errorMessage when the given argumentPackage is not valid.
+
+            return true;
+        }
+
+        public override SeismicAttributeInfo CreateSeismicAttributeInfo(StructureTensor.Arguments argumentPackage, IGeneratorContext context) {
+
+            IList<Slb.Ocean.Petrel.DomainObject.Template> templates = new List<Slb.Ocean.Petrel.DomainObject.Template>();
+            IList<Range1<float>> ranges = new List<Range1<float>>();
+
+            templates.Add(PetrelProject.WellKnownTemplates.SeismicColorGroup.SeismicDipAngle);
+
+            ranges.Add(new Range1<float>(0, 100000000));
+
+            return new SeismicAttributeInfo(
+                templates,
+                ranges,
+                new Index3(5, 5, 5),
+                BorderProcessingMethod.Repeat);
+
+        }
+
+        /// <summary>
+        /// Gets the category of the attribute
+        /// </summary>
+        public override string CategoryName {
+            get { return WellKnownAttributeCategory.Structural; }
+        }
+
+        /// <summary>
+        /// Gets the number of the expected input cubes
+        /// </summary>
+        public override int InputCount {
+            get { return 1; }
+        }
+
+        public override int OutputCount {
+            get { return 1; }
+        }
+
+        protected override IEnumerable<string> GetInputLabels(StructureTensor.Arguments argumentPackage, IGeneratorContext context) {
+            yield return "Input";
+        }
+
+        protected override IEnumerable<string> GetOutputLabels(StructureTensor.Arguments argumentPackage, IGeneratorContext context) {
+            yield return "Output";
+        }
+
+
+        #endregion
+
+        #region Attribute Description related members
+
+        public IDescription Description {
+            get { return new AttributeDescription(); }
+        }
+
+        private class AttributeDescription : IDescription {
+            #region IDescription Members
+
+            /// <summary>
+            /// Gets the name of the attribute
+            /// </summary>
+            public string Name {
+                get { return "Structural tensor"; }
+            }
+
+            /// <summary>
+            /// Gets the description of the attribute
+            /// </summary>
+            public string Description {
+                get { return "structural tensor"; }
+            }
+
+            /// <summary>
+            /// Gets the short description of the attribute
+            /// Currently it is not in use.
+            /// </summary>
+            public string ShortDescription {
+                get { return string.Empty; }
+            }
+
+            #endregion
+        }
+
+        #endregion
+
+        /// <summary>
+        /// This class contains the arguments of the attribute, if it has any.
+        /// </summary>
+        [Archivable(FromRelease = "2020.1")]
+        public class Arguments : Slb.Ocean.Petrel.Workflow.DescribedArgumentsByReflection, IIdentifiable, IDisposable, Slb.Ocean.Petrel.Seismic.INotifyingOnChanged {
+            public Arguments() { }
+
+            [Archived(Name = "Droid")]
+            private Droid droid;
+            public Droid Droid {
+                get { return droid; }
+                set { droid = value; }
+            }
+
+
+            public void CopyFrom(Arguments another) {
+                // TODO: implement the argument copying
+                if (another == null) throw new ArgumentNullException(nameof(another));
+            }
+
+            public bool EqualsTo(Arguments another) {
+                // TODO: implement the argument comparing.
+                // return true if the arguments are considered equal,
+                // return false if they are considered not equal.
+
+                if (another == null) return false;
+                return true;
+            }
+            #region IDisposable Members
+
+            public void Dispose() {
+                Dispose(true);
+                GC.SuppressFinalize(this);
+            }
+
+            protected virtual void Dispose(bool disposing) {
+                if (disposing) {
+                    // TODO: free managed resources
+                }
+
+                // TODO: free unmanaged resources
+            }
+
+            #endregion
+
+            #region INotifyingOnChanged Members
+
+            public event EventHandler<ArgumentPackageChangedEventArgs> Changed;
+
+            private void OnChanged() {
+                if (Changed != null)
+                    Changed(this, new ArgumentPackageChangedEventArgs());
+            }
+
+            #endregion
+
+        }
+
+        public class ArgumentPackageDataSourceFactory : DataSourceFactory {
+            public static string DataSourceId = @"0fe46afa-5dee-4f86-8a10-8bf8c924550f";
+            public override IDataSource GetDataSource() {
+                return new StructuredArchiveDataSource(DataSourceId, new[] { typeof(Arguments) });
+            }
+        }
+
+
+        public class Generator : SeismicAttributeGenerator {
+            /// <summary>
+            /// Argument package
+            /// </summary>
+            private StructureTensor.Arguments arguments;
+
+            /// <summary>
+            /// Parameterized constructor to set argument package and generator context
+            /// </summary>
+            /// <param name="arguments">Argument package</param>
+            /// <param name="context">Generator context</param>
+            /// 
+            public Generator(StructureTensor.Arguments arguments, IGeneratorContext context) {
+                this.arguments = arguments;
+                // Context 被框架注入到基类，无需手动保存或传递
+            }
+
+            #region Overrides from SeismicAttributeGenerator
+
+            public override void Initialize() {
+                // TODO: add any initialization logic here
+            }
+
+            /// <summary>
+            /// This method does the actual work of the attribute.
+            /// </summary>
+            /// <param name="input">array of the input subcubes</param>
+            /// <param name="output">the result cube</param>
+            public override void Calculate(ISubCube[] input, ISubCube[] output) {
+                // 1) 获取输入和输出子块
+                ISubCube inCube = input[0];
+                ISubCube outLam1 = output[0];
+
+                // 2) 遍历“输出”子块有效区域
+                Index3 min = outLam1.MinIJK;
+                Index3 max = outLam1.MaxIJK;
+
+                for (int k = min.K; k <= max.K; k++)
+                    for (int j = min.J; j <= max.J; j++)
+                        for (int i = min.I; i <= max.I; i++) {
+                            // 3.1) 中心差分梯度（假设 CreateSeismicAttributeInfo 已设置 OperatorSize = 3×3×3）
+                            float gx = (inCube[new Index3(i + 1, j, k)]
+                                      - inCube[new Index3(i - 1, j, k)]) * 0.5f;
+                            float gy = (inCube[new Index3(i, j + 1, k)]
+                                      - inCube[new Index3(i, j - 1, k)]) * 0.5f;
+                            float gz = (inCube[new Index3(i, j, k + 1)]
+                                      - inCube[new Index3(i, j, k - 1)]) * 0.5f;
+
+                            // 3.2) 直接构造瞬时结构张量分量
+                            double Txx = gx * gx;
+                            double Tyy = gy * gy;
+                            double Tzz = gz * gz;
+                            double Txy = gx * gy;
+                            double Txz = gx * gz;
+                            double Tyz = gy * gz;
+
+                            // 3.3) 特征值分解
+                            ComputeEigenvaluesSymmetric3x3(
+                                Txx, Txy, Txz,
+                                      Tyy, Tyz,
+                                            Tzz,
+                                out double l1, out double l2, out double l3);
+
+                            // 3.4) 写回
+                            var idx = new Index3(i, j, k);
+                            outLam1[idx] = (float)l1;
+                        }
+            }
+
+
+
+            #endregion
+        }
+        /// <summary>
+        /// Analytic eigen-decomposition for symmetric 3×3 matrix:
+        /// [ a00 a01 a02 ]
+        /// [ a01 a11 a12 ]
+        /// [ a02 a12 a22 ]
+        /// </summary>
+        private static void ComputeEigenvaluesSymmetric3x3(
+                double a00, double a01, double a02,
+                double a11, double a12,
+                double a22,
+                out double w0, out double w1, out double w2) {
+            // 平移到零均值
+            double m = (a00 + a11 + a22) / 3.0;
+            double b00 = a00 - m, b11 = a11 - m, b22 = a22 - m;
+            double b01 = a01, b02 = a02, b12 = a12;
+
+            double p = (b00 * b00 + b11 * b11 + b22 * b22
+                      + 2 * (b01 * b01 + b02 * b02 + b12 * b12)) / 6.0;
+            double detB = b00 * (b11 * b22 - b12 * b12)
+                        - b01 * (b01 * b22 - b12 * b02)
+                        + b02 * (b01 * b12 - b11 * b02);
+            double q = detB / 2.0;
+
+            // 计算角度
+            double phi = Math.Acos(Math.Max(-1, Math.Min(1, q / Math.Sqrt(p * p * p)))) / 3.0;
+
+            // 重构特征值
+            w0 = m + 2.0 * Math.Sqrt(p) * Math.Cos(phi);
+            w1 = m + 2.0 * Math.Sqrt(p) * Math.Cos(phi + 2.0 * Math.PI / 3.0);
+            w2 = 3.0 * m - w0 - w1;
+
+            // 降序排序
+            if (w0 < w1) { var t = w0; w0 = w1; w1 = t; }
+            if (w1 < w2) { var t = w1; w1 = w2; w2 = t; }
+            if (w0 < w1) { var t = w0; w0 = w1; w1 = t; }
+        }
+    }
+}
+
+```
+
+`ocean_plugin/ocean_plugin.csproj`:
+
+```csproj
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemDefinitionGroup>
+    <Reference>
+      <Private>False</Private>
+    </Reference>
+  </ItemDefinitionGroup>
+  <PropertyGroup>
+    <!--ProjectType:Plugin-->
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>9.0.30729</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{7743F0BA-0382-46FA-9EA4-EEDFDE64489D}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>ocean_plugin</RootNamespace>
+    <AssemblyName>ocean_plugin</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Slb.Ocean.Data, Version=1.0.0.0, Culture=neutral, PublicKeyToken=14ef4a483ef6a64b, processorArchitecture=MSIL" />
+    <Reference Include="Slb.Ocean.Petrel.Configuration, Version=20.4.0.0, Culture=neutral, PublicKeyToken=d42cec326f61051f, processorArchitecture=MSIL" />
+    <Reference Include="Slb.Ocean.Petrel.Data.Persistence, Version=20.5.0.0, Culture=neutral, PublicKeyToken=14ef4a483ef6a64b, processorArchitecture=MSIL" />
+    <Reference Include="Slb.Ocean.Petrel.Seismic, Version=20.5.0.0, Culture=neutral, PublicKeyToken=14ef4a483ef6a64b, processorArchitecture=MSIL" />
+    <Reference Include="Slb.Ocean.Petrel.Well, Version=20.5.0.0, Culture=neutral, PublicKeyToken=14ef4a483ef6a64b, processorArchitecture=MSIL" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Deployment" />
+    <Reference Include="Slb.Ocean.Core">
+      <Name>Slb.Ocean.Core</Name>
+      <HintPath>C:\Program Files\Schlumberger\Petrel 2020\Public\slb.ocean.core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Slb.Ocean.Petrel">
+      <Name>Slb.Ocean.Petrel</Name>
+      <HintPath>C:\Program Files\Schlumberger\Petrel 2020\Public\slb.ocean.petrel.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Slb.Ocean.Basics">
+      <Name>Slb.Ocean.Basics</Name>
+      <HintPath>C:\Program Files\Schlumberger\Petrel 2020\Public\Slb.Ocean.Basics.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Slb.Ocean.Geometry">
+      <Name>Slb.Ocean.Geometry</Name>
+      <HintPath>C:\Program Files\Schlumberger\Petrel 2020\Public\Slb.Ocean.Geometry.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="ModuleAttribute.cs" />
+    <Compile Include="Plugin.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RobustNormalization.cs" />
+    <Compile Include="StructureTensor.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.2.0">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 2.0 %28x86%29</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.0">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.0 %28x86%29</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>del "$(ProjectDir)\plugin.xml"
+"%25Ocean2020Home%25\PluginPackager.exe" /g "$(TargetPath)" "$(ProjectDir)\plugin.xml" "%25OCEAN2020HOME_x64%25\petrel.exe"
+"%25Ocean2020Home%25\PluginPackager.exe" /m "$(ProjectDir)\plugin.xml" "%25OCEAN2020HOME_x64%25\petrel.exe" "$(TargetDir)"
+</PostBuildEvent>
+  </PropertyGroup>
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
+		Other similar extension points exist, see Microsoft.Common.targets.
+	<Target Name="BeforeBuild">
+	</Target>
+	<Target Name="AfterBuild">
+	</Target>
+	-->
+</Project>
+```
+
+`ocean_plugin/ocean_plugin.sln`:
+
+```sln
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.36227.6
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ocean_plugin", "ocean_plugin.csproj", "{7743F0BA-0382-46FA-9EA4-EEDFDE64489D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7743F0BA-0382-46FA-9EA4-EEDFDE64489D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7743F0BA-0382-46FA-9EA4-EEDFDE64489D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7743F0BA-0382-46FA-9EA4-EEDFDE64489D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7743F0BA-0382-46FA-9EA4-EEDFDE64489D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FCEA0C72-1B2D-42D5-BA06-CAFE2E0A3173}
+	EndGlobalSection
+EndGlobal
+
+```
+
+`ocean_plugin/plugin.xml`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<InstalledPlugins xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Plugin>
+    <Name>Plugin</Name>
+    <Contact>1968476645@qq.com</Contact>
+    <PluginTypeName>ocean_plugin.Plugin, ocean_plugin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null</PluginTypeName>
+    <PluginUri>http://www.pluginuri.info/</PluginUri>
+    <PluginId>://ocean_plugin.Plugin/1.0.0.0</PluginId>
+    <Trust PublicKeyToken="">Default</Trust>
+    <ReleaseDate>2025-08-09</ReleaseDate>
+    <Author>Qiao</Author>
+    <AppVersion>2020.1</AppVersion>
+    <Modules>
+      <Module TypeName="ocean_plugin.ModuleAttribute, ocean_plugin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null" />
+    </Modules>
+    <Assemblies>
+      <Assembly Name="ocean_plugin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null" />
+    </Assemblies>
+    <assemblyBinding />
+    <StartMode>Startup</StartMode>
+    <StartupAction>None</StartupAction>
+  </Plugin>
+</InstalledPlugins>
+```
