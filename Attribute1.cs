@@ -14,11 +14,8 @@ using Slb.Ocean.Petrel.UI;
 
 namespace ocean_plugin
 {
-    class StructureTensor : SeismicAttribute<StructureTensor.Arguments>, IDescriptionSource
+    class Attribute1 : SeismicAttribute<Attribute1.Arguments>, IDescriptionSource
     {
-        private string[] outputNames = {
-                "structure tensor"
-                };
 
 
         #region Overrides from SeismicAttribute
@@ -39,7 +36,7 @@ namespace ocean_plugin
         }
 
 
-        public override void CopyArgumentPackage(StructureTensor.Arguments fromArgumentPackage, StructureTensor.Arguments toArgumentPackage)
+        public override void CopyArgumentPackage(Attribute1.Arguments fromArgumentPackage, Attribute1.Arguments toArgumentPackage)
         {
             if (fromArgumentPackage != null && toArgumentPackage != null)
             {
@@ -47,7 +44,7 @@ namespace ocean_plugin
             }
         }
 
-        public override bool CompareArgumentPackage(StructureTensor.Arguments firstArgumentPackage, StructureTensor.Arguments secondArgumentPackage)
+        public override bool CompareArgumentPackage(Attribute1.Arguments firstArgumentPackage, Attribute1.Arguments secondArgumentPackage)
         {
             if (firstArgumentPackage != null && secondArgumentPackage != null)
             {
@@ -57,12 +54,12 @@ namespace ocean_plugin
             return false;
         }
 
-        public override SeismicAttributeGenerator CreateAttributeGenerator(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
+        public override SeismicAttributeGenerator CreateAttributeGenerator(Attribute1.Arguments argumentPackage, IGeneratorContext context)
         {
-            return new StructureTensor.Generator(argumentPackage, context);
+            return new Attribute1.Generator(argumentPackage, context);
         }
 
-        public override bool Validate(StructureTensor.Arguments argumentPackage, IGeneratorContext context, out string errorMessage)
+        public override bool Validate(Attribute1.Arguments argumentPackage, IGeneratorContext context, out string errorMessage)
         {
             errorMessage = "N/A";
 
@@ -73,20 +70,20 @@ namespace ocean_plugin
             return true;
         }
 
-        public override SeismicAttributeInfo CreateSeismicAttributeInfo(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
+        public override SeismicAttributeInfo CreateSeismicAttributeInfo(Attribute1.Arguments argumentPackage, IGeneratorContext context)
         {
 
             IList<Slb.Ocean.Petrel.DomainObject.Template> templates = new List<Slb.Ocean.Petrel.DomainObject.Template>();
             IList<Range1<float>> ranges = new List<Range1<float>>();
 
-            templates.Add(PetrelProject.WellKnownTemplates.SeismicColorGroup.SeismicDipAngle);
+            templates.Add(Slb.Ocean.Petrel.DomainObject.Template.NullObject);
 
-            ranges.Add(new Range1<float>(0, 100000000));
+            ranges.Add(new Range1<float>(float.NaN, float.NaN));
 
             return new SeismicAttributeInfo(
                 templates,
                 ranges,
-                new Index3(5, 5, 5),
+                new Index3(1, 1, 1),
                 BorderProcessingMethod.Repeat);
 
         }
@@ -96,7 +93,7 @@ namespace ocean_plugin
         /// </summary>
         public override string CategoryName
         {
-            get { return WellKnownAttributeCategory.Structural; }
+            get { return WellKnownAttributeCategory.Basic; }
         }
 
         /// <summary>
@@ -104,22 +101,25 @@ namespace ocean_plugin
         /// </summary>
         public override int InputCount
         {
-            get { return 1; }
+            get { return 3; }
         }
 
         public override int OutputCount
         {
-            get { return 1; }
+            get { return 2; }
         }
 
-        protected override IEnumerable<string> GetInputLabels(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
+        protected override IEnumerable<string> GetInputLabels(Attribute1.Arguments argumentPackage, IGeneratorContext context)
         {
-            yield return "Input";
+            yield return "seismic";
+            yield return "inline_dip";
+            yield return "xline_dip";
         }
 
-        protected override IEnumerable<string> GetOutputLabels(StructureTensor.Arguments argumentPackage, IGeneratorContext context)
+        protected override IEnumerable<string> GetOutputLabels(Attribute1.Arguments argumentPackage, IGeneratorContext context)
         {
-            yield return "Output";
+            yield return "residual";
+            yield return "background";
         }
 
 
@@ -141,7 +141,7 @@ namespace ocean_plugin
             /// </summary>
             public string Name
             {
-                get { return "Structural tensor"; }
+                get { return "Attribute1"; }
             }
 
             /// <summary>
@@ -149,7 +149,7 @@ namespace ocean_plugin
             /// </summary>
             public string Description
             {
-                get { return "structural tensor"; }
+                get { return ""; }
             }
 
             /// <summary>
@@ -186,7 +186,7 @@ namespace ocean_plugin
             public void CopyFrom(Arguments another)
             {
                 // TODO: implement the argument copying
-                if (another == null) throw new ArgumentNullException(nameof(another));
+                throw new NotImplementedException();
             }
 
             public bool EqualsTo(Arguments another)
@@ -195,8 +195,7 @@ namespace ocean_plugin
                 // return true if the arguments are considered equal,
                 // return false if they are considered not equal.
 
-                if (another == null) return false;
-                return true;
+                throw new NotImplementedException();
             }
             #region IDisposable Members
 
@@ -234,7 +233,7 @@ namespace ocean_plugin
 
         public class ArgumentPackageDataSourceFactory : DataSourceFactory
         {
-            public static string DataSourceId = @"0fe46afa-5dee-4f86-8a10-8bf8c924550f";
+            public static string DataSourceId = @"0071f987-3038-402f-80b6-fb026f1637d3";
             public override IDataSource GetDataSource()
             {
                 return new StructuredArchiveDataSource(DataSourceId, new[] { typeof(Arguments) });
@@ -247,18 +246,21 @@ namespace ocean_plugin
             /// <summary>
             /// Argument package
             /// </summary>
-            private StructureTensor.Arguments arguments;
+            private Attribute1.Arguments arguments;
+            /// <summary>
+            /// Generator context for the attribute
+            /// </summary>
+            private IGeneratorContext generatorContext;
 
             /// <summary>
             /// Parameterized constructor to set argument package and generator context
             /// </summary>
             /// <param name="arguments">Argument package</param>
             /// <param name="context">Generator context</param>
-            /// 
-            public Generator(StructureTensor.Arguments arguments, IGeneratorContext context)
+            public Generator(Attribute1.Arguments arguments, IGeneratorContext generatorContext)
             {
                 this.arguments = arguments;
-                // Context 被框架注入到基类，无需手动保存或传递
+                this.generatorContext = generatorContext;
             }
 
             #region Overrides from SeismicAttributeGenerator
@@ -275,101 +277,13 @@ namespace ocean_plugin
             /// <param name="output">the result cube</param>
             public override void Calculate(ISubCube[] input, ISubCube[] output)
             {
-                // 1) 获取输入和输出子块
-                ISubCube inCube = input[0];
-                ISubCube outLam1 = output[0];
-
-                // 定义一个极小值，用于判断浮点数是否接近于零
-                const double Epsilon = 1e-12;
-
-                // 2) 遍历“输出”子块有效区域
-                Index3 min = outLam1.MinIJK;
-                Index3 max = outLam1.MaxIJK;
-
-                for (int k = min.K; k <= max.K; k++)
-                    for (int j = min.J; j <= max.J; j++)
-                        for (int i = min.I; i <= max.I; i++)
-                        {
-                            var idx = new Index3(i, j, k);
-
-                            // 3.1) 中心差分梯度
-                            float gx = (inCube[new Index3(i + 1, j, k)]
-                                      - inCube[new Index3(i - 1, j, k)]) * 0.5f;
-                            float gy = (inCube[new Index3(i, j + 1, k)]
-                                      - inCube[new Index3(i, j - 1, k)]) * 0.5f;
-                            float gz = (inCube[new Index3(i, j, k + 1)]
-                                      - inCube[new Index3(i, j, k - 1)]) * 0.5f;
-
-                            // 3.2) 直接构造瞬时结构张量分量
-                            double Txx = gx * gx;
-                            double Tyy = gy * gy;
-                            double Tzz = gz * gz;
-
-                            // 关键修复：检查梯度是否为零
-                            // 结构张量的迹 (Txx + Tyy + Tzz) 等于梯度向量模长的平方。
-                            // 如果它接近于零，则说明这是一个平坦点，所有特征值都应为0。
-                            if ((Txx + Tyy + Tzz) < Epsilon)
-                            {
-                                outLam1[idx] = 0.0f;
-                                continue; // 直接处理下一个点
-                            }
-
-                            double Txy = gx * gy;
-                            double Txz = gx * gz;
-                            double Tyz = gy * gz;
-
-                            // 3.3) 特征值分解
-                            ComputeEigenvaluesSymmetric3x3(
-                                Txx, Txy, Txz,
-                                      Tyy, Tyz,
-                                            Tzz,
-                                out double l1, out double l2, out double l3);
-
-                            // 3.4) 写回最大特征值
-                            outLam1[idx] = (float)l1;
-                        }
+                // TODO: Implement the attribute behaviour here
+                return;
             }
-
-
 
             #endregion
         }
-        /// <summary>
-        /// Analytic eigen-decomposition for symmetric 3×3 matrix:
-        /// [ a00 a01 a02 ]
-        /// [ a01 a11 a12 ]
-        /// [ a02 a12 a22 ]
-        /// </summary>
-        private static void ComputeEigenvaluesSymmetric3x3(
-                double a00, double a01, double a02,
-                double a11, double a12,
-                double a22,
-                out double w0, out double w1, out double w2)
-        {
-            // 平移到零均值
-            double m = (a00 + a11 + a22) / 3.0;
-            double b00 = a00 - m, b11 = a11 - m, b22 = a22 - m;
-            double b01 = a01, b02 = a02, b12 = a12;
 
-            double p = (b00 * b00 + b11 * b11 + b22 * b22
-                      + 2 * (b01 * b01 + b02 * b02 + b12 * b12)) / 6.0;
-            double detB = b00 * (b11 * b22 - b12 * b12)
-                        - b01 * (b01 * b22 - b12 * b02)
-                        + b02 * (b01 * b12 - b11 * b02);
-            double q = detB / 2.0;
 
-            // 计算角度
-            double phi = Math.Acos(Math.Max(-1, Math.Min(1, q / Math.Sqrt(p * p * p)))) / 3.0;
-
-            // 重构特征值
-            w0 = m + 2.0 * Math.Sqrt(p) * Math.Cos(phi);
-            w1 = m + 2.0 * Math.Sqrt(p) * Math.Cos(phi + 2.0 * Math.PI / 3.0);
-            w2 = 3.0 * m - w0 - w1;
-
-            // 降序排序
-            if (w0 < w1) { var t = w0; w0 = w1; w1 = t; }
-            if (w1 < w2) { var t = w1; w1 = w2; w2 = t; }
-            if (w0 < w1) { var t = w0; w0 = w1; w1 = t; }
-        }
     }
 }

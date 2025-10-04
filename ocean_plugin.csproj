@@ -69,10 +69,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AbsoluteClipNormalization.cs" />
     <Compile Include="ModuleAttribute.cs" />
+    <Compile Include="MultiAttributeFusion.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="PercentileClipNormalization.cs" />
+    <Compile Include="StructureOrientedFilter.cs" />
     <Compile Include="StructureTensor.cs" />
   </ItemGroup>
   <ItemGroup>

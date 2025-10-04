@@ -65,7 +65,7 @@ namespace ocean_plugin
         {
             IList<Template> templates = new List<Template>();
             IList<Range1<float>> ranges = new List<Range1<float>>();
-            templates.Add(PetrelProject.WellKnownTemplates.SeismicColorGroup.SeismicDefault);
+            templates.Add(PetrelProject.WellKnownTemplates.SeismicColorGroup.SeismicVariance);
             ranges.Add(new Range1<float>(0f, 1f));
             return new SeismicAttributeInfo(templates, ranges, new Index3(1, 1, 1), BorderProcessingMethod.Repeat);
         }
@@ -86,7 +86,7 @@ namespace ocean_plugin
         public IDescription Description { get { return new AttributeDescription(); } }
         private class AttributeDescription : IDescription
         {
-            public string Name { get { return "Percentile Clip Normalization"; } }
+            public string Name { get { return "Percentile clip normalization"; } }
             // 更新描述以反映其参数化特性
             public string Description { get { return "Clips data at user-defined percentiles to suppress outliers, then scales the result to a [0, 1] range to enhance contrast. Memory-efficient implementation."; } }
             public string ShortDescription { get { return "Clips at percentiles and scales to 0-1."; } }
