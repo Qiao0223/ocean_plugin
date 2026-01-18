@@ -5,7 +5,7 @@ using Slb.Ocean.Petrel;
 namespace ocean_plugin
 {
     /// <summary>
-    /// ¿ØÖÆ²å¼şÄ£¿éÉúÃüÖÜÆÚµÄÀà£¬ÊµÏÖ IModule ½Ó¿Ú
+    /// æ§åˆ¶æ’ä»¶æ¨¡å—ç”Ÿå‘½å‘¨æœŸçš„ç±»ï¼Œå®ç° IModule æ¥å£
     /// </summary>
     public class ModuleAttribute : IModule, IDisposable
     {
@@ -13,34 +13,42 @@ namespace ocean_plugin
         {
         }
 
-        #region IModule ½Ó¿Ú³ÉÔ±
+
+            // == Variance ==
+            // Register the new Variance attribute argument package
+            PetrelSystem.AddDataSourceFactory(new ocean_plugin.Variance.ArgumentPackageDataSourceFactory());
+
+            // == Variance ==
+            // Register the new Variance attribute
+            Slb.Ocean.Petrel.Seismic.SeismicSystem.SeismicAttributeService.AddSeismicAttribute(new ocean_plugin.Variance());
+        #region IModule æ¥å£æˆå‘˜
 
         /// <summary>
-        /// Ä£¿é³õÊ¼»¯½×¶Î×îÔçµ÷ÓÃµÄ·½·¨£¬½öµ÷ÓÃÒ»´Î
-        /// ÓÃÓÚ×¢²áÊı¾İÔ´¹¤³§Àà£¨²ÎÊı°üµÄĞòÁĞ»¯Ö§³Ö£©
+        /// æ¨¡å—åˆå§‹åŒ–é˜¶æ®µæœ€æ—©è°ƒç”¨çš„æ–¹æ³•ï¼Œä»…è°ƒç”¨ä¸€æ¬¡
+        /// ç”¨äºæ³¨å†Œæ•°æ®æºå·¥å‚ç±»ï¼ˆå‚æ•°åŒ…çš„åºåˆ—åŒ–æ”¯æŒï¼‰
         /// </summary>
         public void Initialize()
         {
             // Register ocean_plugin.StructureOrientedFilter
             PetrelSystem.AddDataSourceFactory(new ocean_plugin.StructureOrientedFilter.ArgumentPackageDataSourceFactory());
 
-            // ×¢²á StructureTensor µÄ²ÎÊı°üÊı¾İÔ´¹¤³§
+            // æ³¨å†Œ StructureTensor çš„å‚æ•°åŒ…æ•°æ®æºå·¥å‚
             PetrelSystem.AddDataSourceFactory(new ocean_plugin.StructureTensor.ArgumentPackageDataSourceFactory());
 
-            // ×¢²á PercentileClipNormalization µÄ²ÎÊı°üÊı¾İÔ´¹¤³§
+            // æ³¨å†Œ PercentileClipNormalization çš„å‚æ•°åŒ…æ•°æ®æºå·¥å‚
             PetrelSystem.AddDataSourceFactory(new ocean_plugin.PercentileClipNormalization.ArgumentPackageDataSourceFactory());
 
-            // ×¢²á MultiAttributeFusion µÄ²ÎÊı°üÊı¾İÔ´¹¤³§ (ÕâÊÇÒ»¸öºÃµÄÊµ¼ù)
+            // æ³¨å†Œ MultiAttributeFusion çš„å‚æ•°åŒ…æ•°æ®æºå·¥å‚ (è¿™æ˜¯ä¸€ä¸ªå¥½çš„å®è·µ)
             PetrelSystem.AddDataSourceFactory(new ocean_plugin.MultiAttributeFusion.ArgumentPackageDataSourceFactory());
 
-            // == ĞÂÔö ==
-            // ×¢²áÎÒÃÇĞÂµÄ AbsoluteClipNormalization ÊôĞÔµÄ²ÎÊı°üÊı¾İÔ´¹¤³§
+            // == æ–°å¢ ==
+            // æ³¨å†Œæˆ‘ä»¬æ–°çš„ AbsoluteClipNormalization å±æ€§çš„å‚æ•°åŒ…æ•°æ®æºå·¥å‚
             PetrelSystem.AddDataSourceFactory(new ocean_plugin.AbsoluteClipNormalization.ArgumentPackageDataSourceFactory());
         }
 
         /// <summary>
-        /// Ä£¿é³õÊ¼»¯½×¶ÎµÄµÚ¶ş¸öµ÷ÓÃ·½·¨£¬½öµ÷ÓÃÒ»´Î
-        /// ×¢²á·Ç UI ×é¼ş£¬ÈçµØÕğÊôĞÔ¼ÆËãÀà
+        /// æ¨¡å—åˆå§‹åŒ–é˜¶æ®µçš„ç¬¬äºŒä¸ªè°ƒç”¨æ–¹æ³•ï¼Œä»…è°ƒç”¨ä¸€æ¬¡
+        /// æ³¨å†Œé UI ç»„ä»¶ï¼Œå¦‚åœ°éœ‡å±æ€§è®¡ç®—ç±»
         /// </summary>
         public void Integrate()
         {
@@ -49,51 +57,51 @@ namespace ocean_plugin
                 throw new LifecycleException("Required AttributeService is not available.");
             Slb.Ocean.Petrel.Seismic.SeismicSystem.SeismicAttributeService.AddSeismicAttribute(new ocean_plugin.StructureOrientedFilter());
 
-            // È·±£µØÕğÊôĞÔ·şÎñÒÑ¾ÍĞ÷£¬·ñÔòÅ×³öÒì³£
+            // ç¡®ä¿åœ°éœ‡å±æ€§æœåŠ¡å·²å°±ç»ªï¼Œå¦åˆ™æŠ›å‡ºå¼‚å¸¸
             if (Slb.Ocean.Petrel.Seismic.SeismicSystem.SeismicAttributeService == null)
-                throw new LifecycleException("µØÕğÊôĞÔ·şÎñ²»¿ÉÓÃ¡£");
+                throw new LifecycleException("åœ°éœ‡å±æ€§æœåŠ¡ä¸å¯ç”¨ã€‚");
 
-            // ×¢²á StructureTensor
+            // æ³¨å†Œ StructureTensor
             Slb.Ocean.Petrel.Seismic.SeismicSystem.SeismicAttributeService.AddSeismicAttribute(new ocean_plugin.StructureTensor());
 
-            // ×¢²á PercentileClipNormalization
+            // æ³¨å†Œ PercentileClipNormalization
             Slb.Ocean.Petrel.Seismic.SeismicSystem.SeismicAttributeService.AddSeismicAttribute(new ocean_plugin.PercentileClipNormalization());
 
-            // ×¢²á MultiAttributeFusion
+            // æ³¨å†Œ MultiAttributeFusion
             Slb.Ocean.Petrel.Seismic.SeismicSystem.SeismicAttributeService.AddSeismicAttribute(new ocean_plugin.MultiAttributeFusion());
 
-            // == ĞÂÔö ==
-            // ×¢²áÎÒÃÇĞÂµÄ AbsoluteClipNormalization ÊôĞÔ
+            // == æ–°å¢ ==
+            // æ³¨å†Œæˆ‘ä»¬æ–°çš„ AbsoluteClipNormalization å±æ€§
             Slb.Ocean.Petrel.Seismic.SeismicSystem.SeismicAttributeService.AddSeismicAttribute(new ocean_plugin.AbsoluteClipNormalization());
         }
 
         /// <summary>
-        /// Ä£¿é³õÊ¼»¯½×¶ÎµÄµÚÈı¸öµ÷ÓÃ·½·¨£¬½öµ÷ÓÃÒ»´Î
-        /// ¿ÉÓÃÓÚ×¢²á UI Ïà¹Ø×é¼ş£¬ÈçÉèÖÃÒ³Ãæ¡¢ÓÒ¼ü²Ëµ¥µÈ£¨µ±Ç°Î´ÊµÏÖ£©
+        /// æ¨¡å—åˆå§‹åŒ–é˜¶æ®µçš„ç¬¬ä¸‰ä¸ªè°ƒç”¨æ–¹æ³•ï¼Œä»…è°ƒç”¨ä¸€æ¬¡
+        /// å¯ç”¨äºæ³¨å†Œ UI ç›¸å…³ç»„ä»¶ï¼Œå¦‚è®¾ç½®é¡µé¢ã€å³é”®èœå•ç­‰ï¼ˆå½“å‰æœªå®ç°ï¼‰
         /// </summary>
         public void IntegratePresentation()
         {
-            // µ±Ç°Î´×¢²áÈÎºÎ UI Ïà¹Ø×é¼ş
+            // å½“å‰æœªæ³¨å†Œä»»ä½• UI ç›¸å…³ç»„ä»¶
         }
 
         /// <summary>
-        /// Ä£¿éĞ¶ÔØÇ°µ÷ÓÃ£¨Èç¹Ø±Õ Petrel Ê±£©£¬ÓÃÓÚ×ÊÔ´ÇåÀí
+        /// æ¨¡å—å¸è½½å‰è°ƒç”¨ï¼ˆå¦‚å…³é—­ Petrel æ—¶ï¼‰ï¼Œç”¨äºèµ„æºæ¸…ç†
         /// </summary>
         public void Disintegrate()
         {
-            // µ±Ç°Î´½øĞĞ×ÊÔ´ÇåÀí²Ù×÷
+            // å½“å‰æœªè¿›è¡Œèµ„æºæ¸…ç†æ“ä½œ
         }
 
         #endregion
 
-        #region IDisposable ½Ó¿Ú³ÉÔ±
+        #region IDisposable æ¥å£æˆå‘˜
 
         /// <summary>
-        /// ÏÔÊ½ÊÍ·Å×ÊÔ´£¨Óë Disintegrate ÀàËÆ£©
+        /// æ˜¾å¼é‡Šæ”¾èµ„æºï¼ˆä¸ Disintegrate ç±»ä¼¼ï¼‰
         /// </summary>
         public void Dispose()
         {
-            // µ±Ç°Î´ÊÍ·ÅÈÎºÎ×ÊÔ´
+            // å½“å‰æœªé‡Šæ”¾ä»»ä½•èµ„æº
         }
         #endregion
     }
