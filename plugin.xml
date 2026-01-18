@@ -7,7 +7,7 @@
     <PluginUri>http://www.pluginuri.info/</PluginUri>
     <PluginId>://ocean_plugin.Plugin/1.0.0.0</PluginId>
     <Trust PublicKeyToken="">Default</Trust>
-    <ReleaseDate>2025-10-04</ReleaseDate>
+    <ReleaseDate>2025-12-15</ReleaseDate>
     <Author>Qiao</Author>
     <AppVersion>2020.1</AppVersion>
     <Modules>
