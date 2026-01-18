@@ -77,6 +77,7 @@
     <Compile Include="PercentileClipNormalization.cs" />
     <Compile Include="StructureOrientedFilter.cs" />
     <Compile Include="StructureTensor.cs" />
+    <Compile Include="Variance.cs" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Framework.2.0">
